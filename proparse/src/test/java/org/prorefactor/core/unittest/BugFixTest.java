@@ -298,6 +298,11 @@ public class BugFixTest {
   }
 
   @Test
+  public void testOnEvent() throws Exception {
+    genericTest("onEvent.p");
+  }
+
+  @Test
   public void testGetDbClient() throws Exception {
     genericTest("getdbclient.p");
   }
