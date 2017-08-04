@@ -56,6 +56,7 @@ import org.sonar.api.batch.rule.ActiveRule;
 import org.sonar.api.batch.sensor.Sensor;
 import org.sonar.api.batch.sensor.SensorContext;
 import org.sonar.api.batch.sensor.SensorDescriptor;
+import org.sonar.api.batch.sensor.error.NewAnalysisError;
 import org.sonar.api.batch.sensor.issue.NewIssue;
 import org.sonar.api.measures.CoreMetrics;
 import org.sonar.api.rule.RuleKey;
@@ -75,6 +76,8 @@ import org.xml.sax.SAXException;
 import com.google.common.base.Strings;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
+
+import antlr.RecognitionException;
 
 public class OpenEdgeProparseSensor implements Sensor {
   private static final Logger LOG = Loggers.get(OpenEdgeProparseSensor.class);
@@ -211,13 +214,31 @@ public class OpenEdgeProparseSensor implements Sensor {
             ruleTime.get(entry.getKey().ruleKey().toString()) + System.currentTimeMillis() - startTime);
       }
     } catch (RefactorException | ProparseRuntimeException caught) {
-      LOG.error("Error during code parsing for " + file.relativePath(), caught);
+      LOG.error("Error during code parsing for " + file.relativePath());
       numFailures++;
-      NewIssue issue = context.newIssue();
+      NewAnalysisError err = context.newAnalysisError();
+      err.onFile(file);
+      err.message(caught.getMessage());
+      if ( (caught.getCause() != null) && (caught.getCause() instanceof RecognitionException)) {
+        RecognitionException exc = (RecognitionException) caught.getCause();
+        if (exc.getFilename() != null) {
+        try {
+          
+          InputFile ff = context.fileSystem().inputFile(context.fileSystem().predicates().hasPath(exc.getFilename()));
+          err.at(ff.newPointer(exc.getLine(), exc.getColumn()));
+        } catch (IllegalArgumentException xxx) {
+          
+        }}
+        LOG.info("Woot, reco error");
+      }
+      LOG.info("saving error");
+      err.save();
+      
+      /* NewIssue issue = context.newIssue();
       issue.forRule(
           RuleKey.of(OpenEdgeRulesDefinition.REPOSITORY_KEY, OpenEdgeRulesDefinition.PROPARSE_ERROR_RULEKEY)).at(
-              issue.newLocation().on(file).message(caught.getMessage())).save();
-    } catch (RuntimeException caught) {
+              issue.newLocation().on(file).message(caught.getMessage())).save();*/    
+      } catch (RuntimeException caught) {
       numFailures++;
       if ((caught.getCause() != null) && (caught.getCause() instanceof XCodedFileException)) {
         LOG.error("Unable to analyze xcode'd file " + file.relativePath());
